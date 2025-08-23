@@ -15,7 +15,7 @@ app.use(express.json());
 // Add this to your index.js CORS configuration
 // Add this to your backend index.js
 app.use(cors({
-  origin: ["https://your-vercel-frontend.vercel.app", "http://localhost:3000"],
+  origin: ["https://your-vercel-frontend.vercel.app", "http://localhost:10000"],
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
