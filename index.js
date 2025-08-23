@@ -8,13 +8,20 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ✅ SINGLE CORS CONFIGURATION (Fixed)
+// ✅ PROPER CORS CONFIGURATION
 app.use(cors({
-  origin: ["*"], // Allow all origins for now
-  credentials: false,
+  origin: [
+    "https://askbot-2-o-hmif.vercel.app", // Your frontend URL
+    "http://localhost:3000",              // Local development
+    "http://localhost:3001"               // Alternative local port
+  ],
+  credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Add preflight handler for all routes
+app.options('*', cors());
 
 app.use(express.json());
 
@@ -27,7 +34,7 @@ if (!process.env.API_KEY) {
 // Initialize Gemini client
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
-// ✅ ROOT ROUTE
+// Root route
 app.get("/", (req, res) => {
   res.json({ 
     message: "AskBot Backend API is running! 🤖",
@@ -35,15 +42,9 @@ app.get("/", (req, res) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       health: "/api/hello",
-      users: "/api/users", 
       chat: "/generate"
     }
   });
-});
-
-// Health check endpoint
-app.get("/api/hello", (req, res) => {
-  res.json({ message: "Hello from the backend!" });
 });
 
 // AI generation endpoint
