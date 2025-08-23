@@ -8,22 +8,23 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ✅ FIXED CORS CONFIGURATION - Include your exact Vercel URL
+// ✅ BULLETPROOF CORS CONFIGURATION
 app.use(cors({
-  origin: [
-    "https://askbot-2-o-hmif.vercel.app", 
-    "https://askbot-2-o.vercel.app/",
-    "https://askbot-2-o-dj4p.vercel.app/"// ✅ Your exact Vercel frontend URL
-    "http://localhost:3000",                // Local development
-    "http://localhost:3001"                 // Alternative local port
-  ],
-  credentials: true,
+  origin: "*", // Allow all origins for now
+  credentials: false,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
-// Handle preflight requests
-app.options('*', cors());
+// Handle preflight requests explicitly
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.status(204).send();
+});
 
 app.use(express.json());
 
@@ -38,6 +39,7 @@ const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
 // Root route
 app.get("/", (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
   res.json({ 
     message: "AskBot Backend API is running! 🤖",
     status: "online",
@@ -49,15 +51,23 @@ app.get("/", (req, res) => {
   });
 });
 
-// Health check endpoint
-app.get("/api/hello", (req, res) => {
-  res.json({ message: "Hello from the backend!" });
+// Test endpoint
+app.get("/test", (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.json({ message: "CORS test successful!", origin: req.get('origin') });
 });
 
 // AI generation endpoint
 app.post("/generate", async (req, res) => {
+  // Set CORS headers manually
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
   try {
-    console.log("📝 Received request from origin:", req.get('origin'));
+    console.log("📝 POST /generate called");
+    console.log("📝 Request origin:", req.get('origin'));
+    console.log("📝 Request body:", req.body);
     
     const { messages } = req.body;
 
@@ -73,17 +83,19 @@ app.post("/generate", async (req, res) => {
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
 
-    console.log("✅ Sending response:", { reply: text.substring(0, 50) + "..." });
-
+    console.log("✅ AI Response generated successfully");
+    
     return res.status(200).json({ reply: text });
+    
   } catch (error) {
-    console.error("❌ Gemini API error:", error);
+    console.error("❌ Error in /generate:", error);
     return res.status(500).json({ 
-      error: "Gemini API failed: " + (error?.message || "Unknown error") 
+      error: "Backend error: " + error.message 
     });
   }
 });
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ AskBot backend running on 0.0.0.0:${PORT}`);
+  console.log(`🌍 Backend URL: https://askbot-backend-cfl7.onrender.com`);
 });
