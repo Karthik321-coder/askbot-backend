@@ -13,13 +13,14 @@ app.use(cors());
 app.use(express.json());
 
 // Add this to your index.js CORS configuration
+// Add this to your backend index.js
 app.use(cors({
-  origin: [
-    'http://localhost:10000',
-    'https://askbot-2-o.vercel.app',  // ✅ Add your Vercel domain
-    'https://*.vercel.app'            // ✅ Allow all Vercel preview deployments
-  ]
+  origin: ["https://your-vercel-frontend.vercel.app", "http://localhost:3000"],
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 
 
 // Ensure API_KEY exists
