@@ -8,19 +8,19 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ✅ PROPER CORS CONFIGURATION
+// ✅ FIXED CORS CONFIGURATION - Include your exact Vercel URL
 app.use(cors({
   origin: [
-    "https://askbot-2-o-hmif.vercel.app", // Your frontend URL
-    "http://localhost:3000",              // Local development
-    "http://localhost:3001"               // Alternative local port
+    "https://askbot-2-o-hmif.vercel.app",  // ✅ Your exact Vercel frontend URL
+    "http://localhost:3000",                // Local development
+    "http://localhost:3001"                 // Alternative local port
   ],
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Add preflight handler for all routes
+// Handle preflight requests
 app.options('*', cors());
 
 app.use(express.json());
@@ -47,9 +47,16 @@ app.get("/", (req, res) => {
   });
 });
 
+// Health check endpoint
+app.get("/api/hello", (req, res) => {
+  res.json({ message: "Hello from the backend!" });
+});
+
 // AI generation endpoint
 app.post("/generate", async (req, res) => {
   try {
+    console.log("📝 Received request from origin:", req.get('origin'));
+    
     const { messages } = req.body;
 
     if (!Array.isArray(messages)) {
@@ -63,6 +70,8 @@ app.post("/generate", async (req, res) => {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
+
+    console.log("✅ Sending response:", { reply: text.substring(0, 50) + "..." });
 
     return res.status(200).json({ reply: text });
   } catch (error) {
