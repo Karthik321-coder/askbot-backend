@@ -11,7 +11,9 @@ const PORT = process.env.PORT || 10000;
 // ✅ FIXED CORS CONFIGURATION - Include your exact Vercel URL
 app.use(cors({
   origin: [
-    "https://askbot-2-o-hmif.vercel.app",  // ✅ Your exact Vercel frontend URL
+    "https://askbot-2-o-hmif.vercel.app", 
+    "https://askbot-2-o.vercel.app/",
+    "https://askbot-2-o-dj4p.vercel.app/"// ✅ Your exact Vercel frontend URL
     "http://localhost:3000",                // Local development
     "http://localhost:3001"                 // Alternative local port
   ],
