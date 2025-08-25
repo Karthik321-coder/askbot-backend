@@ -97,5 +97,5 @@ app.post("/generate", async (req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ AskBot backend running on 0.0.0.0:${PORT}`);
-  console.log(`🌍 Backend URL: https://askbot-backend-cfl7.onrender.com`);
+  console.log(`🌍 Backend URL: https://askbot-backend.vercel.app`);
 });
