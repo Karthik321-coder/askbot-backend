@@ -1,17 +1,14 @@
-
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
-
 const app = express();
-const PORT = process.env.PORT || 10000;
 
-// ✅ BULLETPROOF CORS CONFIGURATION
+// CORS Configuration
 app.use(cors({
-  origin: "*", // Allow all origins for now
+  origin: "*",
   credentials: false,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -29,14 +26,13 @@ app.options('*', (req, res) => {
 
 app.use(express.json());
 
-// Ensure API_KEY exists
-if (!process.env.API_KEY) {
-  console.error("❌ ERROR: API_KEY not found in .env file");
-  process.exit(1);
+// Initialize Gemini client (don't exit if API_KEY missing in production)
+let genAI;
+if (process.env.API_KEY) {
+  genAI = new GoogleGenerativeAI(process.env.API_KEY);
+} else {
+  console.warn("⚠️ WARNING: API_KEY not found in environment variables");
 }
-
-// Initialize Gemini client
-const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
 // Root route
 app.get("/", (req, res) => {
@@ -46,7 +42,7 @@ app.get("/", (req, res) => {
     status: "online",
     timestamp: new Date().toISOString(),
     endpoints: {
-      health: "/api/hello",
+      health: "/test",
       chat: "/generate"
     }
   });
@@ -70,20 +66,25 @@ app.post("/generate", async (req, res) => {
     console.log("📝 Request origin:", req.get('origin'));
     console.log("📝 Request body:", req.body);
     
+    // Check if API_KEY exists
+    if (!genAI) {
+      return res.status(500).json({ 
+        error: "API_KEY not configured. Please set API_KEY environment variable." 
+      });
+    }
+    
     const { messages } = req.body;
-
     if (!Array.isArray(messages)) {
       return res.status(400).json({ 
         error: "'messages' must be an array of objects [{role, content}]" 
       });
     }
-
+    
     const prompt = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
     
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
-
     console.log("✅ AI Response generated successfully");
     
     return res.status(200).json({ reply: text });
@@ -96,10 +97,5 @@ app.post("/generate", async (req, res) => {
   }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ AskBot backend running on 0.0.0.0:${PORT}`);
-  console.log(`🌍 Backend URL: https://askbot-backend.vercel.app`);
-});
-
-
+// Export for Vercel serverless function
 export default app;
