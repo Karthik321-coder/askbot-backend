@@ -82,7 +82,7 @@ app.post("/generate", async (req, res) => {
     
     const prompt = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
     
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
     console.log("✅ AI Response generated successfully");
