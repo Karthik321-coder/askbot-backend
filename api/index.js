@@ -26,7 +26,7 @@ app.options('*', (req, res) => {
 
 app.use(express.json());
 
-// Initialize Gemini client (don't exit if API_KEY missing in production)
+// Initialize Gemini client
 let genAI;
 if (process.env.API_KEY) {
   genAI = new GoogleGenerativeAI(process.env.API_KEY);
@@ -34,10 +34,10 @@ if (process.env.API_KEY) {
   console.warn("⚠️ WARNING: API_KEY not found in environment variables");
 }
 
-// In-memory conversation store keyed by user ID or session
+// In-memory conversation store
 const conversationHistories = {};
 
-// Utility to get tomorrow's date string (YYYY-MM-DD)
+// Utility to get tomorrow's date string
 function getTomorrowDateStr() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -53,13 +53,22 @@ app.get("/", (req, res) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       health: "/test",
-      chat: "/generate"
+      chat: "/api/chat"
     }
   });
 });
 
 // Test endpoint
-app.post("/generate", async (req, res) => {
+app.get("/test", (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.json({ 
+    message: "Backend is working!",
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Unified chat endpoint for both free and premium
+app.post("/api/chat", async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -67,7 +76,6 @@ app.post("/generate", async (req, res) => {
   try {
     console.log('🔍 === NEW REQUEST ===');
     console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
-    console.log('📥 Request headers:', JSON.stringify(req.headers, null, 2));
 
     if (!genAI) {
       console.error('❌ genAI not initialized - API_KEY missing');
@@ -81,45 +89,35 @@ app.post("/generate", async (req, res) => {
       conversationHistories[userId] = [];
     }
 
-    const { messages } = req.body;
-    console.log('📝 Received messages:', JSON.stringify(messages, null, 2));
+    const { message, isPremium } = req.body;
+    console.log('📝 Received message:', message);
+    console.log('🎯 Premium status:', isPremium);
 
-    if (!Array.isArray(messages)) {
-      console.error('❌ Messages not array:', typeof messages, messages);
+    if (!message || typeof message !== 'string') {
+      console.error('❌ Invalid message format');
       return res.status(400).json({ 
-        error: "'messages' must be an array of objects [{role, content}]" 
+        error: "'message' must be a string" 
       });
     }
 
-    // Append incoming messages to conversation history
-    conversationHistories[userId].push(...messages);
+    // Append user message to conversation history
+    conversationHistories[userId].push({ role: 'user', content: message });
 
     // Limit history size
     if (conversationHistories[userId].length > 20) {
       conversationHistories[userId] = conversationHistories[userId].slice(-20);
     }
 
-    // Detect date-related queries
-    const userMessage = messages[messages.length - 1].content.toLowerCase();
-    if (userMessage.includes("tomorrow")) {
-      conversationHistories[userId].push({ 
-        role: 'system', 
-        content: `Note: Tomorrow's date is ${getTomorrowDateStr()}. Use this for date-related answers.` 
-      });
-    }
-
-    // Build prompt
+    // Build prompt from conversation history
     const prompt = conversationHistories[userId]
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
     
     console.log('🤖 Prompt to send to Gemini:', prompt);
-    console.log('🔑 API_KEY exists:', !!process.env.API_KEY);
-    console.log('🔑 API_KEY length:', process.env.API_KEY ? process.env.API_KEY.length : 0);
 
     // Call Gemini API
     console.log('🌐 Calling Gemini API...');
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
 
@@ -136,7 +134,7 @@ app.post("/generate", async (req, res) => {
     return res.status(200).json(responseData);
 
   } catch (error) {
-    console.error("❌ FULL ERROR in /generate:", error);
+    console.error("❌ FULL ERROR in /api/chat:", error);
     console.error("❌ Error stack:", error.stack);
     return res.status(500).json({ 
       error: "Backend error: " + error.message,
@@ -144,7 +142,6 @@ app.post("/generate", async (req, res) => {
     });
   }
 });
-
 
 // Export for Vercel serverless function
 export default app;
