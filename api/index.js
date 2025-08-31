@@ -118,7 +118,7 @@ app.post("/api/chat", async (req, res) => {
 
     // Call Gemini API
     console.log('🌐 Calling Gemini API...');
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-exp" });
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
 
