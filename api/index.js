@@ -2,12 +2,12 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import OpenAI from "openai"; // ✅ FIXED: Use import instead of require
+import OpenAI from "openai"; // ✅ ADD: DeepSeek integration
 
 dotenv.config();
 const app = express();
 
-// ✅ FIXED: Initialize DeepSeek with import syntax
+// ✅ ADD: Initialize DeepSeek client
 const deepseek = new OpenAI({
   baseURL: 'https://api.deepseek.com',
   apiKey: process.env.DEEPSEEK_API_KEY
@@ -23,7 +23,6 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
-// Handle preflight requests explicitly
 app.options('*', (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -53,7 +52,7 @@ app.get("/", (req, res) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       health: "/test",
-      chat: "/api/chat"
+      chat: "/api/chat" // ✅ FIXED: Correct endpoint
     }
   });
 });
@@ -67,7 +66,7 @@ app.get("/test", (req, res) => {
   });
 });
 
-// ✅ SINGLE UNIFIED CHAT ENDPOINT (removed duplicate)
+// ✅ ADD: Unified chat endpoint with DeepSeek for premium users
 app.post("/api/chat", async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -110,94 +109,79 @@ app.post("/api/chat", async (req, res) => {
 
     let text;
 
-if (isPremium) {
-  try {
-    console.log('🚀 Calling DeepSeek API for Premium user...');
-    console.log('🔑 API Key exists:', !!process.env.DEEPSEEK_API_KEY);
-    console.log('🔑 API Key preview:', process.env.DEEPSEEK_API_KEY ? process.env.DEEPSEEK_API_KEY.substring(0, 8) + '...' : 'NONE');
-    
-    if (!process.env.DEEPSEEK_API_KEY) {
-      throw new Error('DEEPSEEK_API_KEY not configured in environment');
-    }
+    if (isPremium) {
+      try {
+        console.log('🚀 Calling DeepSeek API for Premium user...');
+        console.log('🔑 API Key exists:', !!process.env.DEEPSEEK_API_KEY);
+        
+        if (!process.env.DEEPSEEK_API_KEY) {
+          throw new Error('DEEPSEEK_API_KEY not configured');
+        }
 
-    // ✅ Enhanced system prompt to force correct identity
-    const messages = [
-      {
-        role: "system",
-        content: "You are AskBot AI powered by DeepSeek. You must NEVER identify as GPT, Claude, Gemini, or any other AI. When asked who you are, always respond that you are AskBot powered by DeepSeek AI. You are helpful and knowledgeable."
+        const messages = [
+          {
+            role: "system",
+            content: "You are AskBot AI powered by DeepSeek. You must NEVER identify as GPT, Claude, Gemini, or any other AI. When asked who you are, always respond that you are AskBot powered by DeepSeek AI. You are helpful and knowledgeable."
+          }
+        ];
+
+        // Add conversation history
+        conversationHistories[userId].forEach(msg => {
+          messages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          });
+        });
+
+        console.log('📤 Messages to DeepSeek:', messages.length);
+
+        const completion = await deepseek.chat.completions.create({
+          model: "deepseek-chat",
+          messages: messages,
+          max_tokens: 4000,
+          temperature: 0.7
+        });
+
+        text = completion.choices[0].message.content;
+        console.log('✅ DeepSeek SUCCESS!');
+        
+      } catch (deepseekError) {
+        console.error('❌ DEEPSEEK FAILED:', {
+          message: deepseekError.message,
+          status: deepseekError.status,
+          code: deepseekError.code
+        });
+        
+        console.log('🔄 Falling back to Gemini...');
+        const prompt = conversationHistories[userId]
+          .map(m => `${m.role}: ${m.content}`)
+          .join("\n");
+        
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent(prompt);
+        text = await result.response.text();
       }
-    ];
-
-    // Add conversation history
-    conversationHistories[userId].forEach(msg => {
-      messages.push({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      });
-    });
-
-    console.log('📤 Messages to DeepSeek:', messages.length);
-    console.log('📤 System prompt active:', messages[0].content.includes('DeepSeek'));
-
-    const completion = await deepseek.chat.completions.create({
-      model: "deepseek-chat",
-      messages: messages,
-      max_tokens: 4000,
-      temperature: 0.7,
-      stream: false
-    });
-
-    text = completion.choices[0].message.content;
-    console.log('✅ DeepSeek SUCCESS! Response:', text.substring(0, 100) + '...');
-    
-  } catch (deepseekError) {
-    console.error('❌ DEEPSEEK API FAILED:', {
-      message: deepseekError.message,
-      status: deepseekError.status,
-      code: deepseekError.code,
-      type: deepseekError.type,
-      apiKeyExists: !!process.env.DEEPSEEK_API_KEY
-    });
-    
-    // Log full error for debugging
-    console.error('❌ Complete DeepSeek Error:', JSON.stringify(deepseekError, null, 2));
-    
-    console.log('🔄 Falling back to Gemini...');
-    const prompt = conversationHistories[userId]
-      .map(m => `${m.role}: ${m.content}`)
-      .join("\n");
-    
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
-    const result = await model.generateContent(prompt);
-    text = await result.response.text();
-  }
-} else {
+    } else {
       console.log('🌐 Calling Gemini API for Free user...');
-      // Use Gemini for free users
       const prompt = conversationHistories[userId]
         .map(m => `${m.role}: ${m.content}`)
         .join("\n");
       
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       const result = await model.generateContent(prompt);
       text = await result.response.text();
     }
 
     console.log('✅ Response received');
-    console.log('📄 Response length:', text ? text.length : 0);
-    console.log('📄 Response preview:', text ? text.substring(0, 200) + '...' : 'EMPTY');
-
+    
     // Append AI response to conversation history
     conversationHistories[userId].push({ role: 'assistant', content: text });
 
     const responseData = { reply: text };
-    console.log('📤 Sending response:', JSON.stringify(responseData, null, 2));
-
     return res.status(200).json(responseData);
 
   } catch (error) {
     console.error("❌ FULL ERROR in /api/chat:", error);
-    console.error("❌ Error stack:", error.stack);
     return res.status(500).json({ 
       error: "Backend error: " + error.message,
       details: error.toString()
@@ -205,10 +189,17 @@ if (isPremium) {
   }
 });
 
-// Add this endpoint to test DeepSeek connection
+// ✅ ADD: Debug endpoint to test DeepSeek
 app.get("/debug-deepseek", async (req, res) => {
   try {
-    console.log('🧪 Testing DeepSeek API directly...');
+    console.log('🧪 Testing DeepSeek API...');
+    
+    if (!process.env.DEEPSEEK_API_KEY) {
+      return res.json({
+        success: false,
+        error: 'DEEPSEEK_API_KEY not configured'
+      });
+    }
     
     const completion = await deepseek.chat.completions.create({
       model: "deepseek-chat",
@@ -219,28 +210,22 @@ app.get("/debug-deepseek", async (req, res) => {
         },
         { role: "user", content: "Who are you?" }
       ],
-      max_tokens: 200,
-      temperature: 0.7
+      max_tokens: 200
     });
     
     res.json({
       success: true,
       response: completion.choices[0].message.content,
-      usage: completion.usage,
-      model: completion.model
+      usage: completion.usage
     });
   } catch (error) {
-    console.error('❌ DeepSeek test failed:', error);
     res.json({
       success: false,
       error: error.message,
       status: error.status,
-      code: error.code,
-      details: error.response?.data || 'No additional details'
+      code: error.code
     });
   }
 });
 
-
-// Export for Vercel serverless function
 export default app;
