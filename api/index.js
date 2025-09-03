@@ -110,7 +110,7 @@ app.post("/api/chat", async (req, res) => {
 
     let text;
 
-   if (isPremium) {
+ if (isPremium) {
   try {
     console.log('🚀 Calling DeepSeek API for Premium user...');
     console.log('🔑 API Key status:', process.env.DEEPSEEK_API_KEY ? 'SET' : 'MISSING');
@@ -118,46 +118,48 @@ app.post("/api/chat", async (req, res) => {
     if (!process.env.DEEPSEEK_API_KEY) {
       throw new Error('DEEPSEEK_API_KEY not configured');
     }
-    
-    // ✅ FIX 1: Properly format messages for DeepSeek
+
+    // ✅ CRITICAL FIX: Build messages array correctly
     const messages = [
       {
         role: "system",
-        content: "You are AskBot AI powered by DeepSeek. Respond as a helpful and knowledgeable assistant. Never identify as any other AI model."
+        content: "You are AskBot AI, powered by DeepSeek. You are a helpful and knowledgeable assistant. Always identify yourself as AskBot powered by DeepSeek when asked who you are."
       }
     ];
-    
-    // ✅ FIX 2: Add conversation history with proper role alternation
-    for (const msg of conversationHistories[userId]) {
+
+    // Add conversation history properly
+    conversationHistories[userId].forEach(msg => {
       messages.push({
         role: msg.role === 'user' ? 'user' : 'assistant',
         content: msg.content
       });
-    }
-    
-    // ✅ FIX 3: Log exact messages being sent
-    console.log('📤 Messages to DeepSeek:', JSON.stringify(messages.slice(-3), null, 2)); // Log last 3 messages
-    
+    });
+
+    console.log('📤 Sending to DeepSeek - Message count:', messages.length);
+    console.log('📤 Last message:', messages[messages.length - 1]);
+
     const completion = await deepseek.chat.completions.create({
       model: "deepseek-chat",
       messages: messages,
       max_tokens: 4000,
-      temperature: 0.7
+      temperature: 0.7,
+      stream: false
     });
 
-    text = completion.choices.message.content;
-    console.log('✅ DeepSeek response received:', text.substring(0, 100) + '...');
+    text = completion.choices[0].message.content;
+    console.log('✅ DeepSeek SUCCESS - Response length:', text.length);
+    console.log('✅ DeepSeek Response Preview:', text.substring(0, 150));
     
   } catch (deepseekError) {
-    console.error('❌ DeepSeek API Error Details:', {
+    console.error('❌ DEEPSEEK FAILED:', {
       message: deepseekError.message,
       status: deepseekError.status,
-      type: deepseekError.type,
-      code: deepseekError.code
+      code: deepseekError.code,
+      response: deepseekError.response?.data
     });
     
-    // Fallback to Gemini
-    console.log('🔄 Falling back to Gemini due to DeepSeek error');
+    // Only fallback if absolutely necessary
+    console.log('🔄 Falling back to Gemini due to DeepSeek failure');
     const prompt = conversationHistories[userId]
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
@@ -199,6 +201,43 @@ app.post("/api/chat", async (req, res) => {
     });
   }
 });
+
+// Add this endpoint to test DeepSeek connection
+app.get("/debug-deepseek", async (req, res) => {
+  try {
+    console.log('🧪 Testing DeepSeek API directly...');
+    
+    const completion = await deepseek.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { 
+          role: "system", 
+          content: "You are AskBot AI powered by DeepSeek. When asked who you are, always say you are AskBot powered by DeepSeek." 
+        },
+        { role: "user", content: "Who are you?" }
+      ],
+      max_tokens: 200,
+      temperature: 0.7
+    });
+    
+    res.json({
+      success: true,
+      response: completion.choices[0].message.content,
+      usage: completion.usage,
+      model: completion.model
+    });
+  } catch (error) {
+    console.error('❌ DeepSeek test failed:', error);
+    res.json({
+      success: false,
+      error: error.message,
+      status: error.status,
+      code: error.code,
+      details: error.response?.data || 'No additional details'
+    });
+  }
+});
+
 
 // Export for Vercel serverless function
 export default app;
