@@ -110,43 +110,63 @@ app.post("/api/chat", async (req, res) => {
 
     let text;
 
-    if (isPremium) {
-      try {
-        console.log('🚀 Calling DeepSeek API for Premium user...');
-        if (!process.env.DEEPSEEK_API_KEY) {
-          throw new Error('DEEPSEEK_API_KEY not configured');
-        }
-        
-        const completion = await deepseek.chat.completions.create({
-          model: "deepseek-chat",
-          messages: [
-            {
-              role: "system",
-              content: "You are AskBot Premium with advanced AI capabilities. Provide detailed, helpful responses."
-            },
-            ...conversationHistories[userId].map(msg => ({ 
-              role: msg.role === 'user' ? 'user' : 'assistant', 
-              content: msg.content 
-            }))
-          ],
-          max_tokens: 4000,
-          temperature: 0.7
-        });
-
-        text = completion.choices[0].message.content;
-        
-      } catch (deepseekError) {
-        console.error('❌ DeepSeek error, falling back to Gemini:', deepseekError);
-        // Fallback to Gemini if DeepSeek fails
-        const prompt = conversationHistories[userId]
-          .map(m => `${m.role}: ${m.content}`)
-          .join("\n");
-        
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
-        const result = await model.generateContent(prompt);
-        text = await result.response.text();
+   if (isPremium) {
+  try {
+    console.log('🚀 Calling DeepSeek API for Premium user...');
+    console.log('🔑 API Key status:', process.env.DEEPSEEK_API_KEY ? 'SET' : 'MISSING');
+    
+    if (!process.env.DEEPSEEK_API_KEY) {
+      throw new Error('DEEPSEEK_API_KEY not configured');
+    }
+    
+    // ✅ FIX 1: Properly format messages for DeepSeek
+    const messages = [
+      {
+        role: "system",
+        content: "You are AskBot AI powered by DeepSeek. Respond as a helpful and knowledgeable assistant. Never identify as any other AI model."
       }
-    } else {
+    ];
+    
+    // ✅ FIX 2: Add conversation history with proper role alternation
+    for (const msg of conversationHistories[userId]) {
+      messages.push({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      });
+    }
+    
+    // ✅ FIX 3: Log exact messages being sent
+    console.log('📤 Messages to DeepSeek:', JSON.stringify(messages.slice(-3), null, 2)); // Log last 3 messages
+    
+    const completion = await deepseek.chat.completions.create({
+      model: "deepseek-chat",
+      messages: messages,
+      max_tokens: 4000,
+      temperature: 0.7
+    });
+
+    text = completion.choices.message.content;
+    console.log('✅ DeepSeek response received:', text.substring(0, 100) + '...');
+    
+  } catch (deepseekError) {
+    console.error('❌ DeepSeek API Error Details:', {
+      message: deepseekError.message,
+      status: deepseekError.status,
+      type: deepseekError.type,
+      code: deepseekError.code
+    });
+    
+    // Fallback to Gemini
+    console.log('🔄 Falling back to Gemini due to DeepSeek error');
+    const prompt = conversationHistories[userId]
+      .map(m => `${m.role}: ${m.content}`)
+      .join("\n");
+    
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+    const result = await model.generateContent(prompt);
+    text = await result.response.text();
+  }
+} else {
       console.log('🌐 Calling Gemini API for Free user...');
       // Use Gemini for free users
       const prompt = conversationHistories[userId]
