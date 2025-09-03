@@ -110,24 +110,25 @@ app.post("/api/chat", async (req, res) => {
 
     let text;
 
- if (isPremium) {
+if (isPremium) {
   try {
     console.log('🚀 Calling DeepSeek API for Premium user...');
-    console.log('🔑 API Key status:', process.env.DEEPSEEK_API_KEY ? 'SET' : 'MISSING');
+    console.log('🔑 API Key exists:', !!process.env.DEEPSEEK_API_KEY);
+    console.log('🔑 API Key preview:', process.env.DEEPSEEK_API_KEY ? process.env.DEEPSEEK_API_KEY.substring(0, 8) + '...' : 'NONE');
     
     if (!process.env.DEEPSEEK_API_KEY) {
-      throw new Error('DEEPSEEK_API_KEY not configured');
+      throw new Error('DEEPSEEK_API_KEY not configured in environment');
     }
 
-    // ✅ CRITICAL FIX: Build messages array correctly
+    // ✅ Enhanced system prompt to force correct identity
     const messages = [
       {
         role: "system",
-        content: "You are AskBot AI, powered by DeepSeek. You are a helpful and knowledgeable assistant. Always identify yourself as AskBot powered by DeepSeek when asked who you are."
+        content: "You are AskBot AI powered by DeepSeek. You must NEVER identify as GPT, Claude, Gemini, or any other AI. When asked who you are, always respond that you are AskBot powered by DeepSeek AI. You are helpful and knowledgeable."
       }
     ];
 
-    // Add conversation history properly
+    // Add conversation history
     conversationHistories[userId].forEach(msg => {
       messages.push({
         role: msg.role === 'user' ? 'user' : 'assistant',
@@ -135,8 +136,8 @@ app.post("/api/chat", async (req, res) => {
       });
     });
 
-    console.log('📤 Sending to DeepSeek - Message count:', messages.length);
-    console.log('📤 Last message:', messages[messages.length - 1]);
+    console.log('📤 Messages to DeepSeek:', messages.length);
+    console.log('📤 System prompt active:', messages[0].content.includes('DeepSeek'));
 
     const completion = await deepseek.chat.completions.create({
       model: "deepseek-chat",
@@ -147,19 +148,21 @@ app.post("/api/chat", async (req, res) => {
     });
 
     text = completion.choices[0].message.content;
-    console.log('✅ DeepSeek SUCCESS - Response length:', text.length);
-    console.log('✅ DeepSeek Response Preview:', text.substring(0, 150));
+    console.log('✅ DeepSeek SUCCESS! Response:', text.substring(0, 100) + '...');
     
   } catch (deepseekError) {
-    console.error('❌ DEEPSEEK FAILED:', {
+    console.error('❌ DEEPSEEK API FAILED:', {
       message: deepseekError.message,
       status: deepseekError.status,
       code: deepseekError.code,
-      response: deepseekError.response?.data
+      type: deepseekError.type,
+      apiKeyExists: !!process.env.DEEPSEEK_API_KEY
     });
     
-    // Only fallback if absolutely necessary
-    console.log('🔄 Falling back to Gemini due to DeepSeek failure');
+    // Log full error for debugging
+    console.error('❌ Complete DeepSeek Error:', JSON.stringify(deepseekError, null, 2));
+    
+    console.log('🔄 Falling back to Gemini...');
     const prompt = conversationHistories[userId]
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
