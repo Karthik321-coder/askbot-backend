@@ -167,7 +167,7 @@ if (isPremium) {
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
     
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent(prompt);
     text = await result.response.text();
   }
